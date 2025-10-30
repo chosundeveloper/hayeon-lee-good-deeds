@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { supabase, hasSupabaseEnv } from '../lib/supabaseClient';
 
 export type GoodDeed = {
 	id: string;
@@ -8,6 +9,25 @@ export type GoodDeed = {
 };
 
 const STORAGE_KEY = 'hayeon-good-deeds:v1';
+
+async function fetchDeedsFromSupabase(): Promise<GoodDeed[]> {
+	const { data, error } = await supabase
+		.from('good_deeds')
+		.select('*')
+		.order('createdAt', { ascending: false });
+	if (error) throw error;
+	return (data ?? []) as unknown as GoodDeed[];
+}
+
+async function insertDeedToSupabase(deed: GoodDeed): Promise<void> {
+	const { error } = await supabase.from('good_deeds').insert(deed);
+	if (error) throw error;
+}
+
+async function deleteDeedFromSupabase(id: string): Promise<void> {
+	const { error } = await supabase.from('good_deeds').delete().eq('id', id);
+	if (error) throw error;
+}
 
 function loadDeeds(): GoodDeed[] {
 	try {
@@ -29,11 +49,24 @@ export const App: React.FC = () => {
 	const [query, setQuery] = useState('');
 
 	useEffect(() => {
-		setDeeds(loadDeeds());
+		(async () => {
+			if (hasSupabaseEnv) {
+				try {
+					const remote = await fetchDeedsFromSupabase();
+					setDeeds(remote);
+					return;
+				} catch {
+					// 폴백으로 로컬 사용
+				}
+			}
+			setDeeds(loadDeeds());
+		})();
 	}, []);
 
 	useEffect(() => {
-		saveDeeds(deeds);
+		if (!hasSupabaseEnv) {
+			saveDeeds(deeds);
+		}
 	}, [deeds]);
 
 	const filtered = useMemo(() => {
@@ -42,7 +75,7 @@ export const App: React.FC = () => {
 		return deeds.filter(d => d.author.toLowerCase().includes(q) || d.content.toLowerCase().includes(q));
 	}, [deeds, query]);
 
-	function addDeed(): void {
+	async function addDeed(): Promise<void> {
 		if (!content.trim()) return;
 		const newDeed: GoodDeed = {
 			id: crypto.randomUUID(),
@@ -52,10 +85,16 @@ export const App: React.FC = () => {
 		};
 		setDeeds(prev => [newDeed, ...prev]);
 		setContent('');
+		if (hasSupabaseEnv) {
+			try { await insertDeedToSupabase(newDeed); } catch { /* noop */ }
+		}
 	}
 
-	function removeDeed(id: string): void {
+	async function removeDeed(id: string): Promise<void> {
 		setDeeds(prev => prev.filter(d => d.id !== id));
+		if (hasSupabaseEnv) {
+			try { await deleteDeedFromSupabase(id); } catch { /* noop */ }
+		}
 	}
 
 	function exportJson(): void {
