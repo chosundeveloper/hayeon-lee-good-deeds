@@ -25,7 +25,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          # Disable pnpm cache here; set up pnpm first to avoid lookup error
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
