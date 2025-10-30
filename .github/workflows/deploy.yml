@@ -30,6 +30,11 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Set env
+        run: |
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: pnpm install
 
@@ -51,8 +56,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Set env
-        run: echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> $GITHUB_ENV
 
