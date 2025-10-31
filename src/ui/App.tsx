@@ -14,19 +14,41 @@ async function fetchDeedsFromSupabase(): Promise<GoodDeed[]> {
 	const { data, error } = await supabase
 		.from('good_deeds')
 		.select('*')
-		.order('createdAt', { ascending: false });
-	if (error) throw error;
-	return (data ?? []) as unknown as GoodDeed[];
+		.order('created_at', { ascending: false });
+	if (error) {
+		console.error('Supabase fetch error:', error);
+		throw error;
+	}
+	// Supabase는 스네이크 케이스로 반환, 카멜케이스로 변환
+	return (data ?? []).map((row: any) => ({
+		id: row.id,
+		author: row.author,
+		content: row.content,
+		createdAt: row.created_at || row.createdAt || new Date().toISOString()
+	})) as GoodDeed[];
 }
 
 async function insertDeedToSupabase(deed: GoodDeed): Promise<void> {
-	const { error } = await supabase.from('good_deeds').insert(deed);
-	if (error) throw error;
+	// 카멜케이스를 스네이크 케이스로 변환
+	const row = {
+		id: deed.id,
+		author: deed.author,
+		content: deed.content,
+		created_at: deed.createdAt
+	};
+	const { error } = await supabase.from('good_deeds').insert(row);
+	if (error) {
+		console.error('Supabase insert error:', error);
+		throw error;
+	}
 }
 
 async function deleteDeedFromSupabase(id: string): Promise<void> {
 	const { error } = await supabase.from('good_deeds').delete().eq('id', id);
-	if (error) throw error;
+	if (error) {
+		console.error('Supabase delete error:', error);
+		throw error;
+	}
 }
 
 function loadDeeds(): GoodDeed[] {
@@ -47,19 +69,27 @@ export const App: React.FC = () => {
 	const [content, setContent] = useState('');
 	const [deeds, setDeeds] = useState<GoodDeed[]>([]);
 	const [query, setQuery] = useState('');
+	const [supabaseError, setSupabaseError] = useState<string | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
 
 	useEffect(() => {
 		(async () => {
+			setIsLoading(true);
+			setSupabaseError(null);
 			if (hasSupabaseEnv) {
 				try {
 					const remote = await fetchDeedsFromSupabase();
 					setDeeds(remote);
+					setIsLoading(false);
 					return;
-				} catch {
+				} catch (error) {
+					console.error('Supabase 로드 실패:', error);
+					setSupabaseError(error instanceof Error ? error.message : 'Supabase 연결 실패');
 					// 폴백으로 로컬 사용
 				}
 			}
 			setDeeds(loadDeeds());
+			setIsLoading(false);
 		})();
 	}, []);
 
@@ -83,17 +113,40 @@ export const App: React.FC = () => {
 			content: content.trim(),
 			createdAt: new Date().toISOString()
 		};
-		setDeeds(prev => [newDeed, ...prev]);
-		setContent('');
+		
 		if (hasSupabaseEnv) {
-			try { await insertDeedToSupabase(newDeed); } catch { /* noop */ }
+			try {
+				await insertDeedToSupabase(newDeed);
+				setDeeds(prev => [newDeed, ...prev]);
+				setContent('');
+				setSupabaseError(null);
+			} catch (error) {
+				console.error('Supabase 저장 실패:', error);
+				setSupabaseError(error instanceof Error ? error.message : 'Supabase 저장 실패');
+				// 폴백: 로컬에 저장
+				setDeeds(prev => [newDeed, ...prev]);
+				setContent('');
+			}
+		} else {
+			setDeeds(prev => [newDeed, ...prev]);
+			setContent('');
 		}
 	}
 
 	async function removeDeed(id: string): Promise<void> {
-		setDeeds(prev => prev.filter(d => d.id !== id));
 		if (hasSupabaseEnv) {
-			try { await deleteDeedFromSupabase(id); } catch { /* noop */ }
+			try {
+				await deleteDeedFromSupabase(id);
+				setDeeds(prev => prev.filter(d => d.id !== id));
+				setSupabaseError(null);
+			} catch (error) {
+				console.error('Supabase 삭제 실패:', error);
+				setSupabaseError(error instanceof Error ? error.message : 'Supabase 삭제 실패');
+				// 폴백: 로컬에서만 삭제
+				setDeeds(prev => prev.filter(d => d.id !== id));
+			}
+		} else {
+			setDeeds(prev => prev.filter(d => d.id !== id));
 		}
 	}
 
@@ -111,7 +164,12 @@ export const App: React.FC = () => {
 		<div className="container">
 			<header>
 				<h1>이하연 미담 등록</h1>
-				<p>아름다운 미담을 남겨주세요. 저장은 브라우저에 보관됩니다.</p>
+				<p>아름다운 미담을 남겨주세요. {hasSupabaseEnv ? 'Supabase 클라우드에 저장됩니다.' : '저장은 브라우저에 보관됩니다.'}</p>
+				{supabaseError && (
+					<div style={{padding: '0.8rem', background: 'rgba(255, 107, 107, 0.15)', borderRadius: '0.6rem', marginTop: '0.6rem', fontSize: '0.9rem', color: '#ff6b6b', border: '1px solid rgba(255, 107, 107, 0.3)'}}>
+						⚠️ Supabase 오류: {supabaseError}
+					</div>
+				)}
 			</header>
 
 			<section className="form">
