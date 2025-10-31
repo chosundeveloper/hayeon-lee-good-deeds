@@ -161,7 +161,7 @@ export const App: React.FC = () => {
 			</ul>
 
 			<footer>
-				<small>브라우저 로컬 저장소에만 저장됩니다. 다른 기기와는 자동 동기화되지 않습니다.</small>
+				<small>{hasSupabaseEnv ? 'Supabase 클라우드에 저장되어 모든 기기에서 자동 동기화됩니다.' : '브라우저 로컬 저장소에만 저장됩니다. 다른 기기와는 자동 동기화되지 않습니다.'}</small>
 			</footer>
 		</div>
 	);
